@@ -1,6 +1,7 @@
 const express = require('express');
-const ping = require('ping');
+const axios = require('axios');
 const dns = require('dns').promises;
+const { URL } = require('url');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -12,13 +13,13 @@ app.get('/', (req, res) => {
 
     Usage:
     To ping a target (IP address or domain), send a GET request to:
-    http://ping.minoa.cat/ping?ip={IP to ping}
+    http://ping.minoa.cat/{IP to ping}
     
     Replace {IP to ping} with the IP address or domain you want to ping.
 
     Example Requests:
-    - GET http://ping.minoa.cat/ping?ip=minoa.cat
-    - GET http://ping.minoa.cat/ping?ip=1.1.1.1
+    - GET http://ping.minoa.cat/minoa.cat
+    - GET http://ping.minoa.cat/1.1.1.1
 
     Possible Responses:
     1. Successful Ping to a Domain:
@@ -56,26 +57,25 @@ app.get('/', (req, res) => {
 });
 
 // Route for pinging a target
-app.get('/ping', async (req, res) => {
-    const target = req.query.ip; // Get the IP from query parameters
+app.get('/:target', async (req, res) => {
+    const target = req.params.target; // Get the target from the URL parameter
     const results = {
         target,
         ping: {}
     };
 
-    if (!target) {
-        return res.status(400).json({ error: "Missing 'ip' query parameter." });
-    }
-
     try {
         // Resolve the numeric IP address using DNS
         const ipAddress = await dns.lookup(target);
         
-        const resPing = await ping.promise.probe(ipAddress.address);
+        // Use Axios to send a GET request to the target
+        const startTime = Date.now();
+        await axios.get(`http://${ipAddress.address}`, { timeout: 5000 }); // Ping with a timeout
+        const timeTaken = Date.now() - startTime;
 
         results.ping.ip = ipAddress.address; // Resolved IP address
-        results.ping.time = resPing.time; // Ping response time in ms
-        results.ping.alive = resPing.alive; // Is the host alive?
+        results.ping.time = timeTaken; // Ping response time in ms
+        results.ping.alive = true; // Is the host alive?
         results.ping.host = target; // The host that was pinged
 
         res.json(results);
