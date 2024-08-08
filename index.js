@@ -12,13 +12,13 @@ app.get('/', (req, res) => {
 
     Usage:
     To ping a target (IP address or domain), send a GET request to:
-    /{target}
+    http://ping.minoa.cat/ping?ip={IP to ping}
     
-    Replace {target} with the IP address or domain you want to ping.
+    Replace {IP to ping} with the IP address or domain you want to ping.
 
     Example Requests:
-    - GET /minoa.cat
-    - GET /1.1.1.1
+    - GET http://ping.minoa.cat/ping?ip=minoa.cat
+    - GET http://ping.minoa.cat/ping?ip=1.1.1.1
 
     Possible Responses:
     1. Successful Ping to a Domain:
@@ -56,12 +56,16 @@ app.get('/', (req, res) => {
 });
 
 // Route for pinging a target
-app.get('/:target', async (req, res) => {
-    const target = req.params.target;
+app.get('/ping', async (req, res) => {
+    const target = req.query.ip; // Get the IP from query parameters
     const results = {
         target,
         ping: {}
     };
+
+    if (!target) {
+        return res.status(400).json({ error: "Missing 'ip' query parameter." });
+    }
 
     try {
         // Resolve the numeric IP address using DNS
@@ -82,5 +86,5 @@ app.get('/:target', async (req, res) => {
 });
 
 app.listen(PORT, () => {
-    console.log(`Server is running on `);
+    console.log(`Server is running on http://ping.minoa.cat:${PORT}`);
 });
