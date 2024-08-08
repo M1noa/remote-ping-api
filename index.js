@@ -1,5 +1,5 @@
 const express = require('express');
-const ping = require('ping');
+const ping = require('net-ping');
 const dns = require('dns').promises;
 
 const app = express();
@@ -66,16 +66,21 @@ app.get('/ping/:target', async (req, res) => {
     try {
         // Resolve the numeric IP address using DNS
         const ipAddress = await dns.lookup(target);
+
+        const session = ping.createSession();
         
-        // Ping the resolved IP address
-        const resPing = await ping.promise.probe(ipAddress.address, { timeout: 5 }); // 5-second timeout
-
-        results.ping.ip = resPing.numeric_ip; // Resolved IP address
-        results.ping.time = resPing.time; // Ping response time in ms
-        results.ping.alive = resPing.alive; // Is the host alive?
-        results.ping.host = target; // The host that was pinged
-
-        res.json(results);
+        const startTime = Date.now();
+        session.pingHost(ipAddress.address, (error, targetIp, time) => {
+            if (error) {
+                results.ping.error = `Ping failed: ${error.message}`; // Error message if ping fails
+            } else {
+                results.ping.ip = targetIp; // Resolved IP address
+                results.ping.time = time; // Ping response time in ms
+                results.ping.alive = true; // Is the host alive?
+                results.ping.host = target; // The host that was pinged
+            }
+            res.json(results);
+        });
     } catch (error) {
         results.ping.error = `Ping failed: ${error.message}`; // Error message if ping fails
         res.json(results);
