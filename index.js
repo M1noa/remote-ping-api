@@ -1,5 +1,5 @@
 const express = require('express');
-const ping = require('net-ping');
+const net = require('net');
 const dns = require('dns').promises;
 
 const app = express();
@@ -56,7 +56,7 @@ app.get('/', (req, res) => {
 });
 
 // Route for pinging a target
-app.get('/ping/:target', async (req, res) => {
+app.get('/:target', async (req, res) => {
     const target = req.params.target; // Get the target from the URL parameter
     const results = {
         target,
@@ -67,18 +67,32 @@ app.get('/ping/:target', async (req, res) => {
         // Resolve the numeric IP address using DNS
         const ipAddress = await dns.lookup(target);
 
-        const session = ping.createSession();
-        
         const startTime = Date.now();
-        session.pingHost(ipAddress.address, (error, targetIp, time) => {
-            if (error) {
-                results.ping.error = `Ping failed: ${error.message}`; // Error message if ping fails
-            } else {
-                results.ping.ip = targetIp; // Resolved IP address
-                results.ping.time = time; // Ping response time in ms
-                results.ping.alive = true; // Is the host alive?
-                results.ping.host = target; // The host that was pinged
-            }
+        const timeout = 5000; // Timeout for the connection attempt
+
+        const socket = new net.Socket();
+        socket.setTimeout(timeout);
+
+        socket.connect(80, ipAddress.address, () => {
+            const timeTaken = Date.now() - startTime;
+
+            results.ping.ip = ipAddress.address; // Resolved IP address
+            results.ping.time = timeTaken; // Ping response time in ms
+            results.ping.alive = true; // Is the host alive?
+            results.ping.host = target; // The host that was pinged
+            socket.destroy(); // Close the connection
+            res.json(results);
+        });
+
+        socket.on('error', (error) => {
+            results.ping.error = `Ping failed: ${error.message}`; // Error message if ping fails
+            socket.destroy(); // Close the connection
+            res.json(results);
+        });
+
+        socket.on('timeout', () => {
+            results.ping.error = 'Ping failed: Connection timed out'; // Handle timeout
+            socket.destroy(); // Close the connection
             res.json(results);
         });
     } catch (error) {
