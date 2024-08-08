@@ -67,34 +67,43 @@ app.get('/:target', async (req, res) => {
         // Resolve the numeric IP address using DNS
         const ipAddress = await dns.lookup(target);
 
-        const startTime = Date.now();
-        const timeout = 5000; // Timeout for the connection attempt
+        const ports = [80, 443]; // Common HTTP/HTTPS ports
+        let isAlive = false;
+        let timeTaken = null;
 
-        const socket = new net.Socket();
-        socket.setTimeout(timeout);
+        for (const port of ports) {
+            const startTime = Date.now();
+            const socket = new net.Socket();
+            socket.setTimeout(5000); // Set timeout for the connection attempt
 
-        socket.connect(80, ipAddress.address, () => {
-            const timeTaken = Date.now() - startTime;
+            socket.connect(port, ipAddress.address, () => {
+                isAlive = true;
+                timeTaken = Date.now() - startTime; // Calculate time taken for the connection
+                socket.destroy(); // Close the connection
+            });
 
+            socket.on('error', (error) => {
+                // Handle connection errors but continue checking other ports
+                socket.destroy();
+            });
+
+            socket.on('timeout', () => {
+                socket.destroy(); // Close the connection on timeout
+            });
+        }
+
+        // Wait for a moment to allow the connection attempts to finish
+        setTimeout(() => {
             results.ping.ip = ipAddress.address; // Resolved IP address
-            results.ping.time = timeTaken; // Ping response time in ms
-            results.ping.alive = true; // Is the host alive?
+            results.ping.time = timeTaken !== null ? timeTaken : 'N/A'; // Ping response time in ms
+            results.ping.alive = isAlive; // Is the host alive?
             results.ping.host = target; // The host that was pinged
-            socket.destroy(); // Close the connection
-            res.json(results);
-        });
 
-        socket.on('error', (error) => {
-            results.ping.error = `Ping failed: ${error.message}`; // Error message if ping fails
-            socket.destroy(); // Close the connection
+            if (!isAlive) {
+                results.ping.error = 'Ping failed: No response from the target on common ports';
+            }
             res.json(results);
-        });
-
-        socket.on('timeout', () => {
-            results.ping.error = 'Ping failed: Connection timed out'; // Handle timeout
-            socket.destroy(); // Close the connection
-            res.json(results);
-        });
+        }, 2000); // Wait for 2 seconds to allow port checks to complete
     } catch (error) {
         results.ping.error = `Ping failed: ${error.message}`; // Error message if ping fails
         res.json(results);
