@@ -1,6 +1,6 @@
 const express = require('express');
-const axios = require('axios');
 const dns = require('dns').promises;
+const net = require('net');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -67,15 +67,35 @@ app.get('/:target', async (req, res) => {
         // Resolve the numeric IP address using DNS
         const ipAddress = await dns.lookup(target);
 
-        // Use an external API for pinging
-        const response = await axios.get(`https://api.pingservice.com/ping?ip=${ipAddress.address}`);
+        // Start TCP connection
+        const startTime = Date.now();
+        const client = new net.Socket();
 
-        results.ping.ip = ipAddress.address; // Resolved IP address
-        results.ping.time = response.data.time; // Ping response time in ms
-        results.ping.alive = response.data.alive; // Is the host alive?
-        results.ping.host = target; // The host that was pinged
+        client.setTimeout(5000); // Set a timeout of 5 seconds
 
-        res.json(results);
+        client.connect(80, ipAddress.address, () => {
+            const timeTaken = Date.now() - startTime;
+            results.ping.ip = ipAddress.address; // Resolved IP address
+            results.ping.time = timeTaken; // Ping response time in ms
+            results.ping.alive = true; // Is the host alive?
+            results.ping.host = target; // The host that was pinged
+
+            client.destroy(); // Close the connection
+            res.json(results);
+        });
+
+        client.on('error', (error) => {
+            results.ping.error = `Ping failed: ${error.message}`;
+            client.destroy(); // Close the connection
+            res.json(results);
+        });
+
+        client.on('timeout', () => {
+            results.ping.error = 'Ping failed: Connection timed out';
+            client.destroy(); // Close the connection
+            res.json(results);
+        });
+
     } catch (error) {
         results.ping.error = `Ping failed: ${error.message}`; // Error message if ping fails
         res.json(results);
