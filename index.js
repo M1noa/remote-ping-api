@@ -1,5 +1,5 @@
 const express = require('express');
-const net = require('net');
+const axios = require('axios');
 const dns = require('dns').promises;
 
 const app = express();
@@ -67,43 +67,15 @@ app.get('/:target', async (req, res) => {
         // Resolve the numeric IP address using DNS
         const ipAddress = await dns.lookup(target);
 
-        const ports = [80, 443]; // Common HTTP/HTTPS ports
-        let isAlive = false;
-        let timeTaken = null;
+        // Use an external API for pinging
+        const response = await axios.get(`https://api.pingservice.com/ping?ip=${ipAddress.address}`);
 
-        for (const port of ports) {
-            const startTime = Date.now();
-            const socket = new net.Socket();
-            socket.setTimeout(5000); // Set timeout for the connection attempt
+        results.ping.ip = ipAddress.address; // Resolved IP address
+        results.ping.time = response.data.time; // Ping response time in ms
+        results.ping.alive = response.data.alive; // Is the host alive?
+        results.ping.host = target; // The host that was pinged
 
-            socket.connect(port, ipAddress.address, () => {
-                isAlive = true;
-                timeTaken = Date.now() - startTime; // Calculate time taken for the connection
-                socket.destroy(); // Close the connection
-            });
-
-            socket.on('error', (error) => {
-                // Handle connection errors but continue checking other ports
-                socket.destroy();
-            });
-
-            socket.on('timeout', () => {
-                socket.destroy(); // Close the connection on timeout
-            });
-        }
-
-        // Wait for a moment to allow the connection attempts to finish
-        setTimeout(() => {
-            results.ping.ip = ipAddress.address; // Resolved IP address
-            results.ping.time = timeTaken !== null ? timeTaken : 'N/A'; // Ping response time in ms
-            results.ping.alive = isAlive; // Is the host alive?
-            results.ping.host = target; // The host that was pinged
-
-            if (!isAlive) {
-                results.ping.error = 'Ping failed: No response from the target on common ports';
-            }
-            res.json(results);
-        }, 2000); // Wait for 2 seconds to allow port checks to complete
+        res.json(results);
     } catch (error) {
         results.ping.error = `Ping failed: ${error.message}`; // Error message if ping fails
         res.json(results);
