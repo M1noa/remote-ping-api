@@ -1,7 +1,6 @@
 const express = require('express');
-const axios = require('axios');
+const ping = require('ping');
 const dns = require('dns').promises;
-const { URL } = require('url');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,13 +12,13 @@ app.get('/', (req, res) => {
 
     Usage:
     To ping a target (IP address or domain), send a GET request to:
-    http://ping.minoa.cat/ping/{IP to ping}
+    http://ping.minoa.cat/{IP to ping}
     
     Replace {IP to ping} with the IP address or domain you want to ping.
 
     Example Requests:
-    - GET http://ping.minoa.cat/ping/minoa.cat
-    - GET http://ping.minoa.cat/ping/1.1.1.1
+    - GET http://ping.minoa.cat/minoa.cat
+    - GET http://ping.minoa.cat/1.1.1.1
 
     Possible Responses:
     1. Successful Ping to a Domain:
@@ -68,19 +67,17 @@ app.get('/ping/:target', async (req, res) => {
         // Resolve the numeric IP address using DNS
         const ipAddress = await dns.lookup(target);
         
-        // Use Axios to send a GET request to the target
-        const startTime = Date.now();
-        await axios.get(`http://${ipAddress.address}`, { timeout: 5000 }); // Ping with a timeout
-        const timeTaken = Date.now() - startTime;
+        // Ping the resolved IP address
+        const resPing = await ping.promise.probe(ipAddress.address, { timeout: 5 }); // 5-second timeout
 
-        results.ping.ip = ipAddress.address; // Resolved IP address
-        results.ping.time = timeTaken; // Ping response time in ms
-        results.ping.alive = true; // Is the host alive?
+        results.ping.ip = resPing.numeric_ip; // Resolved IP address
+        results.ping.time = resPing.time; // Ping response time in ms
+        results.ping.alive = resPing.alive; // Is the host alive?
         results.ping.host = target; // The host that was pinged
 
         res.json(results);
     } catch (error) {
-        results.ping.error = error.message; // Error message if ping fails
+        results.ping.error = `Ping failed: ${error.message}`; // Error message if ping fails
         res.json(results);
     }
 });
